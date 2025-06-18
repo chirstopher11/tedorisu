@@ -1,0 +1,171 @@
+// —— グローバル設定 —— 
+const canvas   = document.getElementById('game');
+const ctx      = canvas.getContext('2d');
+const scoreEl  = document.getElementById('score');
+const resetBtn = document.getElementById('reset');
+
+const COLS = 10, ROWS = 20;
+const W    = canvas.width, H = canvas.height;
+const CELL = W / COLS;
+
+let board, score, piece, nextDrop;
+
+// テトリミノ定義（色付き）
+const SHAPES = {
+  I: [ [[1,1,1,1]], [[1],[1],[1],[1]] ],
+  O: [ [[1,1],[1,1]] ],
+  T: [ [[0,1,0],[1,1,1]], [[1,0],[1,1],[1,0]], [[1,1,1],[0,1,0]], [[0,1],[1,1],[0,1]] ],
+  S: [ [[0,1,1],[1,1,0]], [[1,0],[1,1],[0,1]] ],
+  Z: [ [[1,1,0],[0,1,1]], [[0,1],[1,1],[1,0]] ],
+  J: [ [[1,0,0],[1,1,1]], [[1,1],[1,0],[1,0]], [[1,1,1],[0,0,1]], [[0,1],[0,1],[1,1]] ],
+  L: [ [[0,0,1],[1,1,1]], [[1,0],[1,0],[1,1]], [[1,1,1],[1,0,0]], [[1,1],[0,1],[0,1]] ]
+};
+const COLORS = {
+  I: '#0ff',  // シアン
+  O: '#ff0',  // 黄色
+  T: '#a0f',  // 紫
+  S: '#0f0',  // 緑
+  Z: '#f00',  // 赤
+  J: '#00f',  // 青
+  L: '#f80'   // オレンジ
+};
+
+function initGame() {
+  board = Array.from({length: ROWS}, ()=> Array(COLS).fill(null));
+  score = 0;
+  scoreEl.textContent = 'Score: 0';
+  clearInterval(nextDrop);
+  newPiece();
+  draw();
+  nextDrop = setInterval(drop, 500);
+}
+
+function newPiece() {
+  const types = Object.keys(SHAPES);
+  const type  = types[Math.floor(Math.random()*types.length)];
+  piece = {
+    type,
+    rots:  SHAPES[type],
+    rot:   0,
+    shape: SHAPES[type][0],
+    x:     Math.floor((COLS - SHAPES[type][0][0].length)/2),
+    y:     0
+  };
+}
+
+function collide(x,y,shape) {
+  for(let r=0;r<shape.length;r++){
+    for(let c=0;c<shape[r].length;c++){
+      if(shape[r][c]){
+        const nx = x+c, ny = y+r;
+        if(nx<0||nx>=COLS||ny>=ROWS||board[ny][nx]) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function freeze() {
+  const {type,shape,x,y} = piece;
+  shape.forEach((row,r)=> row.forEach((v,c)=>{
+    if(v) board[y+r][x+c] = type;
+  }));
+  clearLines();
+  newPiece();
+  if(collide(piece.x,piece.y,piece.shape)) {
+    alert('Game Over');
+    initGame();
+  }
+}
+
+function clearLines() {
+  let lines = 0;
+  board = board.filter(row => {
+    if(row.every(v=>v!==null)){ lines++; return false; }
+    return true;
+  });
+  while(board.length<ROWS){
+    board.unshift(Array(COLS).fill(null));
+  }
+  if(lines){
+    score += lines*10;
+    scoreEl.textContent = 'Score: '+score;
+  }
+}
+
+function rotate() {
+  const nextRot   = (piece.rot+1)%piece.rots.length;
+  const nextShape = piece.rots[nextRot];
+  if(!collide(piece.x,piece.y,nextShape)) {
+    piece.rot   = nextRot;
+    piece.shape = nextShape;
+  }
+}
+
+function drawCell(x,y,color){
+  ctx.fillStyle   = color;
+  ctx.fillRect(x*CELL,y*CELL,CELL,CELL);
+  ctx.strokeStyle = '#333';
+  ctx.strokeRect(x*CELL,y*CELL,CELL,CELL);
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // 固定ブロック
+  board.forEach((row,r)=>{
+    row.forEach((v,c)=>{
+      if(v) drawCell(c,r,COLORS[v]);
+    });
+  });
+  // 落下中
+  const {type,shape,x,y} = piece;
+  shape.forEach((row,r)=>{
+    row.forEach((v,c)=>{
+      if(v) drawCell(x+c,y+r,COLORS[type]);
+    });
+  });
+}
+
+function drop(){
+  if(!collide(piece.x,piece.y+1,piece.shape)) piece.y++;
+  else freeze();
+  draw();
+}
+
+document.addEventListener('keydown', e=>{
+  if(e.key==='ArrowLeft'  && !collide(piece.x-1,piece.y,piece.shape)) piece.x--;
+  if(e.key==='ArrowRight' && !collide(piece.x+1,piece.y,piece.shape)) piece.x++;
+  if(e.key==='ArrowUp') rotate();
+  if(e.key==='ArrowDown') drop();
+  draw();
+});
+
+resetBtn.addEventListener('click', initGame);
+
+// 初期化スタート
+initGame();
+// 在游戏逻辑之后，追加：
+
+// 绘制图例预览
+Object.keys(SHAPES).forEach(type => drawPreview(type));
+
+function drawPreview(type) {
+  const canvas = document.getElementById('preview-' + type);
+  const ctx = canvas.getContext('2d');
+  const shape = SHAPES[type][0];   // デフォルト向き
+  const color = COLORS[type];
+  const cw = canvas.width / shape[0].length;
+  const ch = canvas.height / shape.length;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  shape.forEach((row, r) => {
+    row.forEach((v, c) => {
+      if (v) {
+        ctx.fillStyle = color;
+        ctx.fillRect(c * cw, r * ch, cw, ch);
+        ctx.strokeStyle = '#333';
+        ctx.strokeRect(c * cw, r * ch, cw, ch);
+      }
+    });
+  });
+}
